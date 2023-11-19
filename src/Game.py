@@ -56,7 +56,14 @@ class Game:
         self.score = 0
 
     def print_game_map(self):
-        self.update_game_map()
+        print(self.count_score())
+        status = self.update_game_map()
+        if status is True:
+            print("PACMAN hat WIN")
+            return
+        if status is False:
+            print("PACMAN has LOST")
+            return
         for i in range(len(self.game_map)):
             for j in range(len(self.game_map[i])):
                 if [i, j] == self.ghost1.location:
@@ -76,7 +83,7 @@ class Game:
                     print(' ', end=' ')
 
             print()
-        time.sleep(0.5)
+        time.sleep(0.25)
         os.system('clear')
 
     def is_game_over(self):
@@ -133,14 +140,16 @@ class Game:
                     remained_dots += 1
         return remained_dots
 
-    def evaluate(self):
+    def evaluate(self, eaten_dots):
         useless_move = 0
         manhattan_distance = self.calc_manhattan_distance()
         nearest_dot = self.find_nearest_dot()
         remained_dots = self.count_remained_dots()
         if self.game_map[self.pacman.location[0]][self.pacman.location[1]] == 2:
             useless_move = -0.5
-        return nearest_dot
+        if manhattan_distance <= 3:
+            return 10000000 * manhattan_distance
+        return -4 * nearest_dot + eaten_dots + 2 * manhattan_distance
 
     def count_score(self):
         if self.game_map[self.pacman.location[0]][self.pacman.location[1]] == 1:
@@ -160,14 +169,22 @@ class Game:
             return True
 
     def update_game_map(self):
-        score = self.count_score()
-        print("Score: " + str(score))
         if self.game_map[self.pacman.location[0]][self.pacman.location[1]] == 1:
             self.game_map[self.pacman.location[0]][self.pacman.location[1]] = 2
+        if self.is_win():
+            return True
+        if self.is_lost():
+            return False
 
-    def minimax(self, agent, curr_depth, depth):
-        if curr_depth == depth:
-            return self.evaluate()
+    def minimax_update_game_map(self, eaten_dots):
+        if self.game_map[self.pacman.location[0]][self.pacman.location[1]] == 1:
+            self.game_map[self.pacman.location[0]][self.pacman.location[1]] = 2
+            return eaten_dots + 30
+        return eaten_dots
+
+    def minimax(self, agent, curr_depth, depth, eaten_dots):
+        if self.is_win() or self.is_lost() or curr_depth == depth:
+            return self.evaluate(eaten_dots)
         if agent == 0:
             max_val = -100000000
             max_loc = [-1, -1]
@@ -175,10 +192,12 @@ class Game:
             game_map_tmp = copy.deepcopy(self.game_map)
             for move in self.pacman.possible_moves(self.game_map):
                 self.pacman.location = move
-                new_val = self.minimax((agent + 1) % 3, curr_depth, depth)
+                new_eaten_dots = self.minimax_update_game_map(eaten_dots)
+                new_val = self.minimax((agent + 1) % 3, curr_depth, depth, new_eaten_dots)
                 if max_val < new_val:
                     max_loc = self.pacman.location
                 self.pacman.location = pac_tmp_loc
+                self.game_map = copy.deepcopy(game_map_tmp)
                 max_val = max(max_val, new_val)
             if curr_depth == 0:
                 return max_val, max_loc
@@ -188,7 +207,7 @@ class Game:
             g1_tmp_loc = self.ghost1.location
             for move in self.ghost1.possible_moves(self.game_map):
                 self.ghost1.location = move
-                new_val = self.minimax((agent + 1) % 3, curr_depth, depth)
+                new_val = self.minimax((agent + 1) % 3, curr_depth, depth, eaten_dots)
                 self.ghost1.location = g1_tmp_loc
                 min_val_g1 = min(min_val_g1, new_val)
             return min_val_g1
@@ -197,7 +216,7 @@ class Game:
             g2_tmp_loc = self.ghost2.location
             for move in self.ghost2.possible_moves(self.game_map):
                 self.ghost2.location = move
-                new_val = self.minimax((agent + 1) % 3, curr_depth + 1, depth)
+                new_val = self.minimax((agent + 1) % 3, curr_depth + 1, depth, eaten_dots)
                 self.ghost2.location = g2_tmp_loc
                 min_val_g2 = min(min_val_g2, new_val)
             return min_val_g2
